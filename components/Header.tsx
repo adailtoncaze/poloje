@@ -5,6 +5,7 @@ import { FileDown, LogOut, Plus, Search, ShieldCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 
 export function Header({
   busca,
@@ -57,8 +58,15 @@ export function Header({
       <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-pct-accent/10 text-pct-accent shadow-teamsInset">
-              <ShieldCheck className="h-5 w-5" />
+            <div className="flex items-center justify-center">
+              <Image
+                src="/logo.svg"
+                alt="PoloJE"
+                width={28}
+                height={28}
+                className="h-11 w-11 rounded-2xl shadow-teamsInset"
+                priority
+              />
             </div>
             <div>
               <h1 className="text-sm font-semibold leading-tight text-pct-text">

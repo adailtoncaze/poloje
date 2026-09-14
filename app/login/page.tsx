@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
-import { ShieldCheck, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -38,16 +39,21 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-pct-bg px-4 py-10">
       <div className="w-full max-w-md rounded-[24px] border border-pct-border bg-pct-panel p-8 shadow-teams">
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-pct-accent/10 text-pct-accent shadow-teamsInset">
-            <ShieldCheck className="h-7 w-7" />
-          </div>
+          <Image
+            src="/logo.svg"
+            alt="PoloJE"
+            width={56}
+            height={56}
+            className="h-14 w-14 rounded-2xl shadow-teamsInset"
+            priority
+          />
           <div>
             <h1 className="text-xl font-semibold text-pct-text">PoloJE</h1>
             <p className="mt-1 text-lg text-pct-muted">
               Gestão e Monitoramento de Polos de Contingência e Transmissão
             </p>
           </div>
-          <p className="text-sm font-medium text-pct-muted">10ª Zona Eleitoral de Guarabira</p>
+         
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
