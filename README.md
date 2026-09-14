@@ -1,4 +1,4 @@
-# PCT — Gestão e Monitoramento de Polos de Contingência e Transmissão
+# PoloJE — Gestão e Monitoramento de Polos de Contingência e Transmissão
 
 Aplicação web (Next.js + Tailwind CSS + Supabase) para a **10ª Zona Eleitoral
 de Guarabira**, com painel de KPIs, cards operacionais de cada PCT, cadastro

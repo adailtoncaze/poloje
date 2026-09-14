@@ -62,9 +62,9 @@ export function Header({
             </div>
             <div>
               <h1 className="text-sm font-semibold leading-tight text-pct-text">
-                Polos de Contingência e Transmissão
+                PoloJE
               </h1>
-              <p className="text-xs text-pct-muted">{ZONA_ELEITORAL_NOME}</p>
+              <p className="text-xs text-pct-muted">Polos de Contingência e Transmissão | {ZONA_ELEITORAL_NOME}</p>
             </div>
           </div>
 

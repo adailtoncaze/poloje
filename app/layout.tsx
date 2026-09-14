@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "GPCT | Gestão de Polos de Contingência e Transmissão",
+  title: "PoloJE | Gestão de Polos de Contingência e Transmissão",
   description: "Gestão e Monitoramento de Polos de Contingência e Transmissão",
 };
 

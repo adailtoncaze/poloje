@@ -42,12 +42,12 @@ export default function LoginPage() {
             <ShieldCheck className="h-7 w-7" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-pct-text">Justiça Eleitoral</h1>
-            <p className="mt-1 text-sm text-pct-muted">
+            <h1 className="text-xl font-semibold text-pct-text">PoloJE</h1>
+            <p className="mt-1 text-lg text-pct-muted">
               Gestão e Monitoramento de Polos de Contingência e Transmissão
             </p>
           </div>
-          <p className="text-xs font-medium text-pct-muted">10ª Zona Eleitoral de Guarabira</p>
+          <p className="text-sm font-medium text-pct-muted">10ª Zona Eleitoral de Guarabira</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
