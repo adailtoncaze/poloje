@@ -43,7 +43,7 @@ export function KpiPanel({ kpis }: { kpis: KpisGerais }) {
         icon={Building2}
         label="Seções Atendidas"
         value={String(kpis.total_secoes_atendidas)}
-        sublabel="100% de cobertura de locais"
+        sublabel="100% de cobertura dos Locais de Votação"
         className="min-h-[150px]"
       />
       <KpiCard

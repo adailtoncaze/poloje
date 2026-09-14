@@ -199,7 +199,7 @@ export function gerarFichaPCT(pct: PCT) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10.5);
     doc.setTextColor(...COLORS.muted);
-    doc.text("10ª Zona Eleitoral — Guarabira • Gestão de Polos de Contingência e Transmissão", left, 25);
+    doc.text("10ª Zona Eleitoral — Guarabira | PoloJE - Gestão de Polos de Contingência e Transmissão", left, 25);
 
     doc.setDrawColor(...COLORS.navy);
     doc.setLineWidth(0.7);
@@ -359,6 +359,16 @@ export function gerarFichaPCT(pct: PCT) {
  * As informações apresentadas continuam as mesmas: contagens gerais no
  * topo e a tabela completa por PCT (Código, Local Polo, Status, Seções,
  * ALVT e Locais Vinculados).
+ *
+ * Na coluna "Local Polo", o endereço (logradouro) é exibido de forma
+ * discreta em uma segunda linha, abaixo do nome do local — fonte menor
+ * e cor COLORS.muted, seguindo o mesmo padrão visual usado nos rótulos
+ * de campo da Ficha PCT. A altura da linha da tabela continua totalmente
+ * automática (calculada pelo autoTable a partir do texto real da célula,
+ * igual às demais colunas); o que muda é só o desenho final: em
+ * `didDrawCell` o conteúdo é redesenhado com dois estilos de fonte
+ * (nome e endereço), algo que o `text` padrão do autoTable não suporta
+ * por linha dentro da mesma célula.
  */
 export function gerarRelatorioConsolidado(pcts: PCT[]) {
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
@@ -382,7 +392,7 @@ export function gerarRelatorioConsolidado(pcts: PCT[]) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10.5);
     doc.setTextColor(...COLORS.muted);
-    doc.text("10ª Zona Eleitoral — Guarabira • Gestão de Polos de Contingência e Transmissão", left, 22.5);
+    doc.text("10ª Zona Eleitoral — Guarabira | PoloJE - Gestão de Polos de Contingência e Transmissão", left, 22.5);
 
     doc.setDrawColor(...COLORS.navy);
     doc.setLineWidth(0.7);
@@ -446,6 +456,27 @@ export function gerarRelatorioConsolidado(pcts: PCT[]) {
   const tableStartY = cursorY + 2.5;
   const headerBottomForTable = 43; // espaço reservado nas páginas seguintes para repetir o cabeçalho institucional
 
+  // Tamanhos/estilo do endereço discreto exibido sob o nome do local, na
+  // coluna "Local Polo" — fonte menor e cor COLORS.muted, mesma ideia do
+  // par rótulo/valor usado na Ficha PCT (drawField), só que dentro da
+  // célula da tabela.
+  const LOCAL_CELL = {
+    columnWidth: 85, // mesma largura fixa usada em columnStyles[1].cellWidth abaixo
+    nomeFontSize: 7.6, // mesmo tamanho já usado no restante da tabela (styles.fontSize)
+    enderecoFontSize: 5.6, // discreto: bem menor que o nome do local
+    lineHeightFactor: 1.15,
+    lineGap: 0.6,
+  };
+
+  // Quebra o texto em quantas linhas forem necessárias para caber em
+  // maxWidth, no fontSize informado — usado para exibir o nome do local
+  // e o endereço por inteiro (sem truncar), na coluna "Local Polo".
+  function wrapLocalCellText(text: string, fontSize: number, maxWidth: number) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(fontSize);
+    return doc.splitTextToSize(text?.trim() || "—", Math.max(10, maxWidth)) as string[];
+  }
+
   autoTable(doc, {
     startY: tableStartY,
     margin: { top: headerBottomForTable, left, right: marginX },
@@ -489,7 +520,7 @@ export function gerarRelatorioConsolidado(pcts: PCT[]) {
     alternateRowStyles: { fillColor: COLORS.navySoft },
     columnStyles: {
       0: { cellWidth: 18, fontStyle: "bold", textColor: COLORS.purple },
-      1: { cellWidth: "auto" },
+      1: { cellWidth: LOCAL_CELL.columnWidth }, // "Local Polo": aumentada para acomodar nome + endereço completos
       2: { cellWidth: 26 },
       3: { cellWidth: 20, halign: "center" },
       4: { cellWidth: 42 },
@@ -497,6 +528,9 @@ export function gerarRelatorioConsolidado(pcts: PCT[]) {
     },
     // Colore o texto da coluna Status com as mesmas cores de sucesso/alerta
     // usadas no indicador discreto da Ficha PCT (COLORS.success / warning).
+    // Também reserva altura extra na coluna "Local Polo" quando o PCT tem
+    // logradouro cadastrado, para caber o endereço discreto na linha de
+    // baixo (o texto em si é desenhado depois, em didDrawCell).
     didParseCell: (data: any) => {
       if (data.section === "body" && data.column.index === 2) {
         const pct = pcts[data.row.index];
@@ -505,6 +539,89 @@ export function gerarRelatorioConsolidado(pcts: PCT[]) {
           data.cell.styles.textColor = isReady ? COLORS.successText : COLORS.warning;
           data.cell.styles.fontStyle = "bold";
         }
+      }
+
+      if (data.section === "body" && data.column.index === 1) {
+        const pct = pcts[data.row.index];
+        const endereco = pct?.logradouro?.trim();
+        if (endereco) {
+          const padX = typeof data.cell.styles.cellPadding === "number" ? data.cell.styles.cellPadding : 2.6;
+          // usa a largura fixa conhecida da coluna (e não data.cell.width):
+          // nesta fase (didParseCell) o autoTable ainda não calculou a
+          // largura final da célula, então data.cell.width vale 0 aqui —
+          // usar esse valor gerava uma quebra de linha errada (muito mais
+          // linhas do que o necessário) e, com isso, uma altura de linha
+          // maior do que a realmente exigida pelo conteúdo
+          const maxWidth = LOCAL_CELL.columnWidth - padX * 2;
+          const nomeLines = wrapLocalCellText(pct.nome, LOCAL_CELL.nomeFontSize, maxWidth);
+          const enderecoLines = wrapLocalCellText(endereco, LOCAL_CELL.enderecoFontSize, maxWidth);
+          // mantém o texto real (todas as linhas de nome + endereço) na
+          // célula: a altura da linha passa a ser calculada automaticamente
+          // pelo autoTable a partir do conteúdo, sem nenhum valor fixo
+          // forçado manualmente — o redesenho com os dois estilos ocorre
+          // depois, em didDrawCell
+          data.cell.text = [...nomeLines, ...enderecoLines];
+        }
+      }
+    },
+    // Desenha manualmente o nome do local + endereço discreto na coluna
+    // "Local Polo" (célula cujo texto padrão foi suprimido acima).
+    didDrawCell: (data: any) => {
+      if (data.section === "body" && data.column.index === 1) {
+        const pct = pcts[data.row.index];
+        const endereco = pct?.logradouro?.trim();
+        if (!endereco) {
+          return;
+        }
+
+        const padX = typeof data.cell.styles.cellPadding === "number" ? data.cell.styles.cellPadding : 2.6;
+        // aqui (didDrawCell) data.cell.width já reflete o valor final, mas
+        // usamos a mesma constante do didParseCell para garantir que a
+        // quebra de linha seja idêntica à que definiu a altura da célula
+        const maxWidth = LOCAL_CELL.columnWidth - padX * 2;
+        const mmPerPt = 0.352778;
+        const nomeLines = wrapLocalCellText(pct.nome, LOCAL_CELL.nomeFontSize, maxWidth);
+        const enderecoLines = wrapLocalCellText(endereco, LOCAL_CELL.enderecoFontSize, maxWidth);
+        const nomeLineH = LOCAL_CELL.nomeFontSize * mmPerPt * LOCAL_CELL.lineHeightFactor;
+        const enderecoLineH = LOCAL_CELL.enderecoFontSize * mmPerPt * LOCAL_CELL.lineHeightFactor;
+        const blockHeight = nomeLines.length * nomeLineH + LOCAL_CELL.lineGap + enderecoLines.length * enderecoLineH;
+        const textX = data.cell.x + padX;
+        let y = data.cell.y + (data.cell.height - blockHeight) / 2;
+
+        // a altura da célula já foi calculada automaticamente pelo autoTable
+        // (a partir do texto real definido em didParseCell); aqui só
+        // repintamos o fundo, na mesma cor da linha (zebra), para cobrir o
+        // texto padrão de uma só cor e redesenhar nome + endereço com os
+        // dois estilos desejados
+        // o autoTable aplica alternateRowStyles nas linhas de índice PAR
+        // (0, 2, 4...) — precisa usar a mesma paridade aqui para o fundo
+        // repintado bater com o resto da linha (senão fica um "recorte"
+        // de cor diferente só nesta coluna)
+        const isAlternateRow = data.row.index % 2 === 0;
+        doc.setFillColor(...(isAlternateRow ? COLORS.navySoft : ([255, 255, 255] as RGB)));
+        doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, "F");
+
+        // desenha o nome completo do local (pode ocupar mais de uma linha)
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(LOCAL_CELL.nomeFontSize);
+        doc.setTextColor(...COLORS.text);
+        nomeLines.forEach((line) => {
+          y += nomeLineH;
+          doc.text(line, textX, y - 1);
+        });
+
+        // desenha o endereço completo, discreto, logo abaixo do nome
+        y += LOCAL_CELL.lineGap;
+        doc.setFontSize(LOCAL_CELL.enderecoFontSize);
+        doc.setTextColor(...COLORS.muted);
+        enderecoLines.forEach((line) => {
+          y += enderecoLineH;
+          doc.text(line, textX, y - 1);
+        });
+
+        // restaura os estilos padrão da tabela para as próximas células
+        doc.setTextColor(...COLORS.text);
+        doc.setFontSize(7.6);
       }
     },
     // Repete o cabeçalho institucional em todas as páginas geradas pela tabela
