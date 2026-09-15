@@ -174,6 +174,61 @@ function drawLocalTable(doc: jsPDF, items: Array<{ nome_escola: string; secoes_c
   return startY + rowH + items.length * rowH;
 }
 
+/**
+ * Parâmetros de desenho da lista de observações da Ficha PCT — cada linha
+ * do campo "Observações técnicas" vira um item com marcador (bullet),
+ * com recuo pendurado (hanging indent) quando o texto do item quebra em
+ * mais de uma linha.
+ */
+const OBSERVACOES_LIST = {
+  bulletIndent: 4.5, // distância entre o marcador "•" e o início do texto do item
+  lineHeight: 4.2, // altura de cada linha de texto (mesmo valor usado em drawField)
+  itemGap: 1.8, // respiro vertical entre um item e o próximo
+  fontSize: 9.5,
+};
+
+/** Calcula a altura total (mm) necessária para desenhar a lista de observações, sem desenhar nada. */
+function calcObservacoesListHeight(doc: jsPDF, itens: string[], maxWidth: number) {
+  const { bulletIndent, lineHeight, itemGap, fontSize } = OBSERVACOES_LIST;
+  const textWidth = Math.max(10, maxWidth - bulletIndent);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(fontSize);
+
+  let altura = 0;
+  itens.forEach((item) => {
+    const linhas = doc.splitTextToSize(item, textWidth);
+    altura += linhas.length * lineHeight + itemGap;
+  });
+
+  return itens.length > 0 ? altura - itemGap : 0;
+}
+
+/** Desenha a lista de observações (uma linha do campo = um item com marcador) e retorna o Y final. */
+function drawObservacoesList(doc: jsPDF, itens: string[], x: number, startY: number, maxWidth: number) {
+  const { bulletIndent, lineHeight, itemGap, fontSize } = OBSERVACOES_LIST;
+  const textWidth = Math.max(10, maxWidth - bulletIndent);
+  let y = startY;
+
+  doc.setTextColor(...COLORS.text);
+
+  itens.forEach((item) => {
+    const linhas = doc.splitTextToSize(item, textWidth);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(fontSize);
+    doc.text("•", x, y);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(fontSize);
+    doc.text(linhas, x + bulletIndent, y);
+
+    y += linhas.length * lineHeight + itemGap;
+  });
+
+  return y - itemGap;
+}
+
 /** Gera a Ficha em PDF de um único PCT — layout espelha o modelo HTML PCT-0001 */
 export function gerarFichaPCT(pct: PCT) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -333,14 +388,27 @@ export function gerarFichaPCT(pct: PCT) {
 
   // ---- Observações Gerais ----
   cursorY = drawSectionHeader(doc, "Observações Gerais", cursorY, left, sectionWidth);
-  const observacao = pct.observacoes_tecnicas?.trim() || "Campo destinado a registros complementares, ocorrências de manutenção ou pendências identificadas na preparação do polo para o pleito.";
-  const obsLines = splitToFit(doc, observacao, sectionWidth - 4);
-  const obsRequired = LAYOUT.labelGap + obsLines.length * 4.2;
-  cursorY = ensureSpace(obsRequired, cursorY);
-  doc.setTextColor(...COLORS.muted);
-  doc.setFont("helvetica", "italic");
-  doc.setFontSize(9.5);
-  doc.text(obsLines, left, cursorY + LAYOUT.labelGap);
+  const linhasObservacao = (pct.observacoes_tecnicas ?? "")
+    .split("\n")
+    .map((linha) => linha.trim())
+    .filter((linha) => linha.length > 0);
+
+  if (linhasObservacao.length > 0) {
+    const obsWidth = sectionWidth - 4;
+    const obsHeight = calcObservacoesListHeight(doc, linhasObservacao, obsWidth);
+    cursorY = ensureSpace(LAYOUT.labelGap + obsHeight, cursorY);
+    drawObservacoesList(doc, linhasObservacao, left + 2, cursorY + LAYOUT.labelGap, obsWidth);
+  } else {
+    const observacaoPadrao =
+      "Campo destinado a registros complementares, ocorrências de manutenção ou pendências identificadas na preparação do polo para o pleito.";
+    const obsLines = splitToFit(doc, observacaoPadrao, sectionWidth - 4);
+    const obsRequired = LAYOUT.labelGap + obsLines.length * 4.2;
+    cursorY = ensureSpace(obsRequired, cursorY);
+    doc.setTextColor(...COLORS.muted);
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(9.5);
+    doc.text(obsLines, left, cursorY + LAYOUT.labelGap);
+  }
 
   for (let i = 1; i <= doc.getNumberOfPages(); i++) {
     doc.setPage(i);
@@ -637,4 +705,244 @@ export function gerarRelatorioConsolidado(pcts: PCT[]) {
   }
 
   doc.save("Relatorio_Consolidado_PCTs.pdf");
+}
+
+/**
+ * Gera um relatório simplificado de todos os PCTs da Zona Eleitoral.
+ *
+ * Reaproveita o mesmo tema e formato visual de gerarRelatorioConsolidado
+ * (cabeçalho institucional, faixas de seção navy, cores de status e
+ * rodapé padronizado), mas com um recorte de informação mais enxuto:
+ *
+ * - Colunas da tabela: Código, Local Polo, Status, Seções e ALVT — sem a
+ *   coluna "Locais Vinculados". A coluna "Seções" mostra apenas as
+ *   seções próprias do PCT (pct.secoes_proprias), sem somar as seções
+ *   dos locais vinculados.
+ * - Bloco de resumo sem o KPI "Com locais vinculados".
+ *
+ * Pensada para ser chamada a partir de um botão no Header (ex.:
+ * onClick={() => gerarRelatorioSimplificadoPCTs(pcts)}).
+ */
+export function gerarRelatorioSimplificadoPCTs(pcts: PCT[]) {
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const marginX = 14;
+  const left = marginX;
+  const right = pageWidth - marginX;
+  const contentWidth = right - left;
+  const footerY = pageHeight - 9;
+
+  const reportTitle = `Relatório de PCTs — ${ZONA_ELEITORAL_NOME}`;
+
+  function drawPageHeader() {
+    // Cabeçalho institucional, no mesmo padrão da Ficha PCT / relatório consolidado
+    doc.setTextColor(...COLORS.navy);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14.5);
+    doc.text("TRIBUNAL REGIONAL ELEITORAL DA PARAÍBA", left, 16);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10.5);
+    doc.setTextColor(...COLORS.muted);
+    doc.text("10ª Zona Eleitoral — Guarabira | PoloJE - Gestão de Polos de Contingência e Transmissão", left, 22.5);
+
+    doc.setDrawColor(...COLORS.navy);
+    doc.setLineWidth(0.7);
+    doc.line(left, 27, right, 27);
+
+    doc.setTextColor(...COLORS.text);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text(reportTitle, left, 34);
+  }
+
+  function drawFooter() {
+    const pageNumber = doc.getCurrentPageInfo().pageNumber;
+    const totalPages = doc.getNumberOfPages();
+    const dividerY = footerY - 5;
+    doc.setDrawColor(...COLORS.border);
+    doc.setLineWidth(0.25);
+    doc.line(left, dividerY, right, dividerY);
+
+    doc.setTextColor(144, 150, 168);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    doc.text(`Emitido em ${formatDateTime(new Date(), true)}`, left, footerY);
+    doc.text(`Página ${pageNumber} de ${totalPages}`, right, footerY, { align: "right" });
+  }
+
+  drawPageHeader();
+  let cursorY = 40;
+
+  // ---- Resumo Geral ---- (sem o KPI "Com locais vinculados")
+  cursorY = drawSectionHeader(doc, "Resumo Geral", cursorY, left, contentWidth);
+
+  const totalPcts = pcts.length;
+  const pronto = pcts.filter((p) => p.status === "pronto_transmissao").length;
+  const teste = pcts.filter((p) => p.status === "em_teste_link").length;
+
+  const summaryFields = [
+    { label: "TOTAL DE PCTs", value: String(totalPcts) },
+    { label: "PRONTOS P/ TRANSMISSÃO", value: String(pronto) },
+    { label: "EM TESTE DE LINK", value: String(teste) },
+  ];
+  const summaryColWidth = contentWidth / summaryFields.length;
+  const summaryLabelY = cursorY + LAYOUT.labelGap;
+  summaryFields.forEach((field, index) => {
+    const x = left + index * summaryColWidth;
+    doc.setTextColor(...COLORS.label);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text(field.label, x, summaryLabelY);
+    doc.setTextColor(...COLORS.text);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(15);
+    doc.text(field.value, x, summaryLabelY + 7);
+  });
+  cursorY = summaryLabelY + 7 + LAYOUT.postSectionGap;
+
+  // ---- Detalhamento por PCT ---- (Código, Local Polo, Status, Seções, ALVT)
+  cursorY = drawSectionHeader(doc, "Detalhamento por PCT", cursorY, left, contentWidth);
+  const tableStartY = cursorY + 2.5;
+  const headerBottomForTable = 43; // espaço reservado nas páginas seguintes para repetir o cabeçalho institucional
+
+  // Tamanhos/estilo do endereço discreto exibido sob o nome do local, na
+  // coluna "Local Polo" — mesma ideia usada em gerarRelatorioConsolidado.
+  const LOCAL_CELL = {
+    columnWidth: 100, // maior que no consolidado: sem a coluna "Locais Vinculados" sobra espaço
+    nomeFontSize: 7.6,
+    enderecoFontSize: 5.6,
+    lineHeightFactor: 1.15,
+    lineGap: 0.6,
+  };
+
+  function wrapLocalCellText(text: string, fontSize: number, maxWidth: number) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(fontSize);
+    return doc.splitTextToSize(text?.trim() || "—", Math.max(10, maxWidth)) as string[];
+  }
+
+  autoTable(doc, {
+    startY: tableStartY,
+    margin: { top: headerBottomForTable, left, right: marginX },
+    head: [["Código", "Local Polo", "Status", "Seções", "ALVT"]],
+    body: pcts.map((p) => [p.codigo, p.nome, STATUS_LABELS[p.status], String(p.secoes_proprias ?? 0), p.alvt?.nome ?? "—"]),
+    theme: "plain",
+    styles: {
+      font: "helvetica",
+      fontSize: 7.6,
+      cellPadding: 2.6,
+      textColor: COLORS.text,
+      overflow: "linebreak",
+      valign: "middle",
+      lineColor: COLORS.border,
+      lineWidth: 0.15,
+    },
+    headStyles: {
+      fillColor: COLORS.navy,
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 8,
+      halign: "left",
+    },
+    bodyStyles: {
+      fillColor: [255, 255, 255],
+    },
+    alternateRowStyles: { fillColor: COLORS.navySoft },
+    columnStyles: {
+      0: { cellWidth: 18, fontStyle: "bold", textColor: COLORS.purple },
+      1: { cellWidth: LOCAL_CELL.columnWidth }, // "Local Polo": nome + endereço completos
+      2: { cellWidth: 30 },
+      3: { cellWidth: 22, halign: "center" },
+      4: { cellWidth: "auto" },
+    },
+    // Colore o texto da coluna Status com as mesmas cores de sucesso/alerta
+    // usadas no indicador discreto da Ficha PCT (COLORS.success / warning).
+    // Também reserva altura extra na coluna "Local Polo" quando o PCT tem
+    // logradouro cadastrado, para caber o endereço discreto na linha de
+    // baixo (o texto em si é desenhado depois, em didDrawCell).
+    didParseCell: (data: any) => {
+      if (data.section === "body" && data.column.index === 2) {
+        const pct = pcts[data.row.index];
+        if (pct) {
+          const isReady = pct.status === "pronto_transmissao";
+          data.cell.styles.textColor = isReady ? COLORS.successText : COLORS.warning;
+          data.cell.styles.fontStyle = "bold";
+        }
+      }
+
+      if (data.section === "body" && data.column.index === 1) {
+        const pct = pcts[data.row.index];
+        const endereco = pct?.logradouro?.trim();
+        if (endereco) {
+          const padX = typeof data.cell.styles.cellPadding === "number" ? data.cell.styles.cellPadding : 2.6;
+          // usa a largura fixa conhecida da coluna (e não data.cell.width):
+          // nesta fase (didParseCell) o autoTable ainda não calculou a
+          // largura final da célula, então data.cell.width vale 0 aqui
+          const maxWidth = LOCAL_CELL.columnWidth - padX * 2;
+          const nomeLines = wrapLocalCellText(pct.nome, LOCAL_CELL.nomeFontSize, maxWidth);
+          const enderecoLines = wrapLocalCellText(endereco, LOCAL_CELL.enderecoFontSize, maxWidth);
+          data.cell.text = [...nomeLines, ...enderecoLines];
+        }
+      }
+    },
+    // Desenha manualmente o nome do local + endereço discreto na coluna
+    // "Local Polo" (célula cujo texto padrão foi suprimido acima).
+    didDrawCell: (data: any) => {
+      if (data.section === "body" && data.column.index === 1) {
+        const pct = pcts[data.row.index];
+        const endereco = pct?.logradouro?.trim();
+        if (!endereco) {
+          return;
+        }
+
+        const padX = typeof data.cell.styles.cellPadding === "number" ? data.cell.styles.cellPadding : 2.6;
+        const maxWidth = LOCAL_CELL.columnWidth - padX * 2;
+        const mmPerPt = 0.352778;
+        const nomeLines = wrapLocalCellText(pct.nome, LOCAL_CELL.nomeFontSize, maxWidth);
+        const enderecoLines = wrapLocalCellText(endereco, LOCAL_CELL.enderecoFontSize, maxWidth);
+        const nomeLineH = LOCAL_CELL.nomeFontSize * mmPerPt * LOCAL_CELL.lineHeightFactor;
+        const enderecoLineH = LOCAL_CELL.enderecoFontSize * mmPerPt * LOCAL_CELL.lineHeightFactor;
+        const blockHeight = nomeLines.length * nomeLineH + LOCAL_CELL.lineGap + enderecoLines.length * enderecoLineH;
+        const textX = data.cell.x + padX;
+        let y = data.cell.y + (data.cell.height - blockHeight) / 2;
+
+        const isAlternateRow = data.row.index % 2 === 0;
+        doc.setFillColor(...(isAlternateRow ? COLORS.navySoft : ([255, 255, 255] as RGB)));
+        doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, "F");
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(LOCAL_CELL.nomeFontSize);
+        doc.setTextColor(...COLORS.text);
+        nomeLines.forEach((line) => {
+          y += nomeLineH;
+          doc.text(line, textX, y - 1);
+        });
+
+        y += LOCAL_CELL.lineGap;
+        doc.setFontSize(LOCAL_CELL.enderecoFontSize);
+        doc.setTextColor(...COLORS.muted);
+        enderecoLines.forEach((line) => {
+          y += enderecoLineH;
+          doc.text(line, textX, y - 1);
+        });
+
+        doc.setTextColor(...COLORS.text);
+        doc.setFontSize(7.6);
+      }
+    },
+    // Repete o cabeçalho institucional em todas as páginas geradas pela tabela
+    didDrawPage: () => {
+      drawPageHeader();
+    },
+  });
+
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    drawFooter();
+  }
+
+  doc.save("Relatorio_Secoes_PCTs.pdf");
 }

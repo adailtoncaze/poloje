@@ -1,10 +1,10 @@
 "use client";
 
 import { StatusProntidao, STATUS_LABELS, ZONA_ELEITORAL_NOME } from "@/lib/types";
-import { FileDown, LogOut, Plus, Search, ShieldCheck } from "lucide-react";
+import { ChevronDown, FileDown, LogOut, Plus, Search, ShieldCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 
 export function Header({
@@ -14,6 +14,7 @@ export function Header({
   onStatusFiltroChange,
   onNovoPct,
   onExportarRelatorio,
+  onExportarRelatorioSimplificado,
   searchDisabled = false,
 }: {
   busca: string;
@@ -22,12 +23,15 @@ export function Header({
   onStatusFiltroChange: (v: StatusProntidao | "todos") => void;
   onNovoPct: () => void;
   onExportarRelatorio: () => void;
+  onExportarRelatorioSimplificado: () => void;
   searchDisabled?: boolean;
 }) {
   const router = useRouter();
   const supabase = createClient();
   const [saindo, setSaindo] = useState(false);
   const [usuarioEmail, setUsuarioEmail] = useState<string | null>(null);
+  const [relatoriosAberto, setRelatoriosAberto] = useState(false);
+  const relatoriosRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     async function carregarUsuario() {
@@ -39,6 +43,19 @@ export function Header({
 
     carregarUsuario();
   }, [supabase]);
+
+  useEffect(() => {
+    if (!relatoriosAberto) return;
+
+    function handleClickFora(event: MouseEvent) {
+      if (relatoriosRef.current && !relatoriosRef.current.contains(event.target as Node)) {
+        setRelatoriosAberto(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickFora);
+    return () => document.removeEventListener("mousedown", handleClickFora);
+  }, [relatoriosAberto]);
 
   async function handleLogout() {
     if (saindo) return;
@@ -82,12 +99,50 @@ export function Header({
                 {usuarioEmail}
               </span>
             )}
-            <button
-              onClick={onExportarRelatorio}
-              className="teams-button-secondary gap-1.5 px-3 py-2 text-[11px]"
-            >
-              <FileDown className="h-3.5 w-3.5" /> Relatório Consolidado
-            </button>
+            <div className="relative" ref={relatoriosRef}>
+              <button
+                type="button"
+                onClick={() => setRelatoriosAberto((atual) => !atual)}
+                aria-haspopup="menu"
+                aria-expanded={relatoriosAberto}
+                className="teams-button-secondary gap-1.5 px-3 py-2 text-[11px]"
+              >
+                <FileDown className="h-3.5 w-3.5" /> Relatórios
+                <ChevronDown
+                  className={`h-3.5 w-3.5 transition-transform ${relatoriosAberto ? "rotate-180" : ""}`}
+                />
+              </button>
+
+              {relatoriosAberto && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-[calc(100%+6px)] z-40 w-52 overflow-hidden rounded-xl border border-pct-border bg-white p-1 shadow-lg"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      onExportarRelatorio();
+                      setRelatoriosAberto(false);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-pct-text transition hover:bg-slate-50"
+                  >
+                    <FileDown className="h-3.5 w-3.5 text-pct-accent" /> Relatório Consolidado
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      onExportarRelatorioSimplificado();
+                      setRelatoriosAberto(false);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-pct-text transition hover:bg-slate-50"
+                  >
+                    <FileDown className="h-3.5 w-3.5 text-pct-accent" /> Relatório Simplificado
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               onClick={onNovoPct}
               className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#4f52b3] px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-[#4348a4]"

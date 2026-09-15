@@ -13,6 +13,7 @@ import {
   UserRound,
   Clock3,
   ClipboardList,
+  FileText,
   Pencil,
   Save,
   RotateCcw,
@@ -146,6 +147,15 @@ export function PctDetailsModal({
       ? form.secoes_totais ?? 0
       : Number(form.secoes_proprias ?? 0) + secoesLocaisVinculados;
   }, [form, locais]);
+
+  const linhasObservacoes = useMemo(() => {
+    if (!form?.observacoes_tecnicas) return [];
+
+    return form.observacoes_tecnicas
+      .split("\n")
+      .map((linha) => linha.trim())
+      .filter((linha) => linha.length > 0);
+  }, [form?.observacoes_tecnicas]);
 
   if (!open || !form) return null;
 
@@ -890,6 +900,23 @@ export function PctDetailsModal({
                     <span className="font-medium text-pct-text">{form.conectividade ?? "—"}</span>
                   </div>
                 </div>
+              </section>
+
+              <section className="space-y-3 rounded-2xl border border-pct-border bg-white p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-pct-text">
+                  <FileText className="h-4 w-4 text-pct-accent" />
+                  Observações técnicas
+                </div>
+
+                {linhasObservacoes.length > 0 ? (
+                  <ul className="list-disc space-y-1.5 pl-4 text-sm text-pct-text">
+                    {linhasObservacoes.map((linha, index) => (
+                      <li key={`observacao-${index}`}>{linha}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-pct-muted">Nenhuma observação registrada.</p>
+                )}
               </section>
 
               <section className="rounded-2xl border border-pct-border bg-white p-4">

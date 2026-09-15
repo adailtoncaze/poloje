@@ -8,7 +8,7 @@ import { PctCard } from "@/components/PctCard";
 import { Header } from "@/components/Header";
 import { NewPctDrawer } from "@/components/NewPctDrawer";
 import { PctDetailsModal } from "@/components/PctDetailsModal";
-import { gerarRelatorioConsolidado } from "@/lib/pdf";
+import { gerarRelatorioConsolidado, gerarRelatorioSimplificadoPCTs } from "@/lib/pdf";
 import { Loader2, RadioTower } from "lucide-react";
 
 export default function DashboardPage() {
@@ -92,6 +92,7 @@ export default function DashboardPage() {
         onStatusFiltroChange={setStatusFiltro}
         onNovoPct={() => setDrawerAberto(true)}
         onExportarRelatorio={() => gerarRelatorioConsolidado(pctsFiltrados)}
+        onExportarRelatorioSimplificado={() => gerarRelatorioSimplificadoPCTs(pctsFiltrados)}
         searchDisabled={searchDisabled}
       />
 
