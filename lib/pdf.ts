@@ -822,12 +822,11 @@ export function gerarRelatorioSimplificadoPCTs(pcts: PCT[]) {
     doc.setFontSize(fontSize);
     return doc.splitTextToSize(text?.trim() || "—", Math.max(10, maxWidth)) as string[];
   }
-
   autoTable(doc, {
     startY: tableStartY,
     margin: { top: headerBottomForTable, left, right: marginX },
-    head: [["Código", "Local Polo", "Status", "Seções", "ALVT"]],
-    body: pcts.map((p) => [p.codigo, p.nome, STATUS_LABELS[p.status], String(p.secoes_proprias ?? 0), p.alvt?.nome ?? "—"]),
+    head: [["Código", "Local Polo", "Status", "ALVT"]],
+    body: pcts.map((p) => [p.codigo, p.nome, STATUS_LABELS[p.status], p.alvt?.nome ?? "—"]),
     theme: "plain",
     styles: {
       font: "helvetica",
@@ -854,8 +853,7 @@ export function gerarRelatorioSimplificadoPCTs(pcts: PCT[]) {
       0: { cellWidth: 18, fontStyle: "bold", textColor: COLORS.purple },
       1: { cellWidth: LOCAL_CELL.columnWidth }, // "Local Polo": nome + endereço completos
       2: { cellWidth: 30 },
-      3: { cellWidth: 22, halign: "center" },
-      4: { cellWidth: "auto" },
+      3: { cellWidth: "auto" },
     },
     // Colore o texto da coluna Status com as mesmas cores de sucesso/alerta
     // usadas no indicador discreto da Ficha PCT (COLORS.success / warning).
@@ -877,9 +875,6 @@ export function gerarRelatorioSimplificadoPCTs(pcts: PCT[]) {
         const endereco = pct?.logradouro?.trim();
         if (endereco) {
           const padX = typeof data.cell.styles.cellPadding === "number" ? data.cell.styles.cellPadding : 2.6;
-          // usa a largura fixa conhecida da coluna (e não data.cell.width):
-          // nesta fase (didParseCell) o autoTable ainda não calculou a
-          // largura final da célula, então data.cell.width vale 0 aqui
           const maxWidth = LOCAL_CELL.columnWidth - padX * 2;
           const nomeLines = wrapLocalCellText(pct.nome, LOCAL_CELL.nomeFontSize, maxWidth);
           const enderecoLines = wrapLocalCellText(endereco, LOCAL_CELL.enderecoFontSize, maxWidth);
